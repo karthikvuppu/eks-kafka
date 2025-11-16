@@ -1,7 +1,5 @@
 # Environment Configuration
-environment  = "sandbox"
-project_name = "iris-streaming"
-aws_region   = "eu-west-1"
+aws_region = "eu-west-1"
 
 # VPC Configuration
 vpc_cidr             = "10.0.0.0/16"
@@ -11,7 +9,6 @@ enable_nat_gateway   = true
 single_nat_gateway   = false
 
 # EKS Cluster Configuration
-cluster_name                         = "iris-streaming-sandbox-eks"
 cluster_version                      = "1.28"
 cluster_endpoint_public_access       = true
 cluster_endpoint_private_access      = true
@@ -33,6 +30,7 @@ node_groups = {
     }
     taints = []
   }
+  # Uncomment for Kafka-specific node group
   # kafka = {
   #   desired_size   = 3
   #   min_size       = 3
@@ -58,18 +56,10 @@ enable_aws_load_balancer_controller = true
 enable_ebs_csi_driver               = true
 enable_efs_csi_driver               = false
 
-# Kafka Configuration (if using MSK)
-enable_kafka         = false
-kafka_version        = "3.5.1"
-kafka_broker_count   = 3
-kafka_instance_type  = "kafka.m5.large"
-
 # Tags
 common_tags = {
   Environment = "sandbox"
-  Project     = "iris-streaming"
+  Project     = "ltim"
   ManagedBy   = "Terraform"
   Team        = "Platform"
 }
-
-additional_tags = {}

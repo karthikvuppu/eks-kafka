@@ -11,12 +11,13 @@ terraform {
       version = "~> 4.0"
     }
   }
+
+  backend "s3" {
+    # Backend configuration is loaded from vars/backend.hcl
+    # terraform init -backend-config=vars/backend.hcl
+  }
 }
 
 provider "aws" {
   region = var.aws_region
-
-  default_tags {
-    tags = var.common_tags
-  }
 }

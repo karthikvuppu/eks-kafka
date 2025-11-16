@@ -16,7 +16,7 @@ resource "aws_iam_role" "eks_cluster" {
   })
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.project_name}-${var.environment}-eks-cluster-role"
     }
@@ -52,7 +52,7 @@ resource "aws_iam_role" "eks_node_group" {
   })
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.project_name}-${var.environment}-eks-node-group-role"
     }
@@ -77,7 +77,7 @@ resource "aws_iam_role_policy_attachment" "eks_container_registry_policy" {
 
 # EBS CSI Driver IAM Role
 resource "aws_iam_role" "ebs_csi_driver" {
-  count = var.enable_ebs_csi_driver ? 1 : 0
+  count = var.enable_ebs_csi_driver && var.oidc_provider_arn != "" ? 1 : 0
   name  = "${var.project_name}-${var.environment}-ebs-csi-driver-role"
 
   assume_role_policy = jsonencode({
@@ -87,12 +87,12 @@ resource "aws_iam_role" "ebs_csi_driver" {
         Action = "sts:AssumeRoleWithWebIdentity"
         Effect = "Allow"
         Principal = {
-          Federated = aws_iam_openid_connect_provider.eks.arn
+          Federated = var.oidc_provider_arn
         }
         Condition = {
           StringEquals = {
-            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
-            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" = "sts.amazonaws.com"
+            "${replace(var.oidc_provider_url, "https://", "")}:sub" = "system:serviceaccount:kube-system:ebs-csi-controller-sa"
+            "${replace(var.oidc_provider_url, "https://", "")}:aud" = "sts.amazonaws.com"
           }
         }
       }
@@ -100,7 +100,7 @@ resource "aws_iam_role" "ebs_csi_driver" {
   })
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.project_name}-${var.environment}-ebs-csi-driver-role"
     }
@@ -108,32 +108,14 @@ resource "aws_iam_role" "ebs_csi_driver" {
 }
 
 resource "aws_iam_role_policy_attachment" "ebs_csi_driver_policy" {
-  count      = var.enable_ebs_csi_driver ? 1 : 0
+  count      = var.enable_ebs_csi_driver && var.oidc_provider_arn != "" ? 1 : 0
   policy_arn = "arn:aws:iam::aws:policy/service-role/AmazonEBSCSIDriverPolicy"
   role       = aws_iam_role.ebs_csi_driver[0].name
 }
 
-# OIDC Provider for EKS
-data "tls_certificate" "eks" {
-  url = aws_eks_cluster.main.identity[0].oidc[0].issuer
-}
-
-resource "aws_iam_openid_connect_provider" "eks" {
-  client_id_list  = ["sts.amazonaws.com"]
-  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
-  url             = aws_eks_cluster.main.identity[0].oidc[0].issuer
-
-  tags = merge(
-    var.common_tags,
-    {
-      Name = "${var.project_name}-${var.environment}-eks-oidc"
-    }
-  )
-}
-
 # AWS Load Balancer Controller IAM Role
 resource "aws_iam_role" "aws_load_balancer_controller" {
-  count = var.enable_aws_load_balancer_controller ? 1 : 0
+  count = var.enable_aws_load_balancer_controller && var.oidc_provider_arn != "" ? 1 : 0
   name  = "${var.project_name}-${var.environment}-aws-lb-controller-role"
 
   assume_role_policy = jsonencode({
@@ -143,12 +125,12 @@ resource "aws_iam_role" "aws_load_balancer_controller" {
         Action = "sts:AssumeRoleWithWebIdentity"
         Effect = "Allow"
         Principal = {
-          Federated = aws_iam_openid_connect_provider.eks.arn
+          Federated = var.oidc_provider_arn
         }
         Condition = {
           StringEquals = {
-            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:sub" = "system:serviceaccount:kube-system:aws-load-balancer-controller"
-            "${replace(aws_iam_openid_connect_provider.eks.url, "https://", "")}:aud" = "sts.amazonaws.com"
+            "${replace(var.oidc_provider_url, "https://", "")}:sub" = "system:serviceaccount:kube-system:aws-load-balancer-controller"
+            "${replace(var.oidc_provider_url, "https://", "")}:aud" = "sts.amazonaws.com"
           }
         }
       }
@@ -156,7 +138,7 @@ resource "aws_iam_role" "aws_load_balancer_controller" {
   })
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.project_name}-${var.environment}-aws-lb-controller-role"
     }
@@ -164,7 +146,7 @@ resource "aws_iam_role" "aws_load_balancer_controller" {
 }
 
 resource "aws_iam_policy" "aws_load_balancer_controller" {
-  count       = var.enable_aws_load_balancer_controller ? 1 : 0
+  count       = var.enable_aws_load_balancer_controller && var.oidc_provider_arn != "" ? 1 : 0
   name        = "${var.project_name}-${var.environment}-aws-lb-controller-policy"
   description = "IAM policy for AWS Load Balancer Controller"
 
@@ -239,13 +221,7 @@ resource "aws_iam_policy" "aws_load_balancer_controller" {
         Effect = "Allow"
         Action = [
           "ec2:AuthorizeSecurityGroupIngress",
-          "ec2:RevokeSecurityGroupIngress"
-        ]
-        Resource = "*"
-      },
-      {
-        Effect = "Allow"
-        Action = [
+          "ec2:RevokeSecurityGroupIngress",
           "ec2:CreateSecurityGroup"
         ]
         Resource = "*"
@@ -390,7 +366,89 @@ resource "aws_iam_policy" "aws_load_balancer_controller" {
 }
 
 resource "aws_iam_role_policy_attachment" "aws_load_balancer_controller" {
-  count      = var.enable_aws_load_balancer_controller ? 1 : 0
+  count      = var.enable_aws_load_balancer_controller && var.oidc_provider_arn != "" ? 1 : 0
   policy_arn = aws_iam_policy.aws_load_balancer_controller[0].arn
   role       = aws_iam_role.aws_load_balancer_controller[0].name
+}
+
+# EFS CSI Driver IAM Role
+resource "aws_iam_role" "efs_csi_driver" {
+  count = var.enable_efs_csi_driver && var.oidc_provider_arn != "" ? 1 : 0
+  name  = "${var.project_name}-${var.environment}-efs-csi-driver-role"
+
+  assume_role_policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Action = "sts:AssumeRoleWithWebIdentity"
+        Effect = "Allow"
+        Principal = {
+          Federated = var.oidc_provider_arn
+        }
+        Condition = {
+          StringEquals = {
+            "${replace(var.oidc_provider_url, "https://", "")}:sub" = "system:serviceaccount:kube-system:efs-csi-controller-sa"
+            "${replace(var.oidc_provider_url, "https://", "")}:aud" = "sts.amazonaws.com"
+          }
+        }
+      }
+    ]
+  })
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.project_name}-${var.environment}-efs-csi-driver-role"
+    }
+  )
+}
+
+resource "aws_iam_policy" "efs_csi_driver" {
+  count       = var.enable_efs_csi_driver && var.oidc_provider_arn != "" ? 1 : 0
+  name        = "${var.project_name}-${var.environment}-efs-csi-driver-policy"
+  description = "IAM policy for EFS CSI Driver"
+
+  policy = jsonencode({
+    Version = "2012-10-17"
+    Statement = [
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticfilesystem:DescribeAccessPoints",
+          "elasticfilesystem:DescribeFileSystems",
+          "elasticfilesystem:DescribeMountTargets",
+          "ec2:DescribeAvailabilityZones"
+        ]
+        Resource = "*"
+      },
+      {
+        Effect = "Allow"
+        Action = [
+          "elasticfilesystem:CreateAccessPoint"
+        ]
+        Resource = "*"
+        Condition = {
+          StringLike = {
+            "aws:RequestTag/efs.csi.aws.com/cluster" = "true"
+          }
+        }
+      },
+      {
+        Effect = "Allow"
+        Action = "elasticfilesystem:DeleteAccessPoint"
+        Resource = "*"
+        Condition = {
+          StringEquals = {
+            "aws:ResourceTag/efs.csi.aws.com/cluster" = "true"
+          }
+        }
+      }
+    ]
+  })
+}
+
+resource "aws_iam_role_policy_attachment" "efs_csi_driver" {
+  count      = var.enable_efs_csi_driver && var.oidc_provider_arn != "" ? 1 : 0
+  policy_arn = aws_iam_policy.efs_csi_driver[0].arn
+  role       = aws_iam_role.efs_csi_driver[0].name
 }

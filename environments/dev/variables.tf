@@ -1,19 +1,11 @@
-variable "environment" {
-  description = "Environment name (e.g., sandbox, dev, prod)"
-  type        = string
-}
-
-variable "project_name" {
-  description = "Project name used for resource naming"
-  type        = string
-}
-
+# AWS Region
 variable "aws_region" {
   description = "AWS region where resources will be created"
   type        = string
   default     = "eu-west-1"
 }
 
+# VPC Variables
 variable "vpc_cidr" {
   description = "CIDR block for VPC"
   type        = string
@@ -51,11 +43,6 @@ variable "single_nat_gateway" {
 }
 
 # EKS Variables
-variable "cluster_name" {
-  description = "Name of the EKS cluster"
-  type        = string
-}
-
 variable "cluster_version" {
   description = "Kubernetes version for the EKS cluster"
   type        = string
@@ -131,40 +118,9 @@ variable "enable_efs_csi_driver" {
   default     = false
 }
 
-# Kafka Variables (Optional - can be extended)
-variable "enable_kafka" {
-  description = "Enable Kafka deployment"
-  type        = bool
-  default     = false
-}
-
-variable "kafka_version" {
-  description = "Kafka version"
-  type        = string
-  default     = "3.5.1"
-}
-
-variable "kafka_broker_count" {
-  description = "Number of Kafka brokers"
-  type        = number
-  default     = 3
-}
-
-variable "kafka_instance_type" {
-  description = "Instance type for Kafka brokers"
-  type        = string
-  default     = "kafka.m5.large"
-}
-
 # Tags
 variable "common_tags" {
   description = "Common tags to apply to all resources"
-  type        = map(string)
-  default     = {}
-}
-
-variable "additional_tags" {
-  description = "Additional tags for specific resources"
   type        = map(string)
   default     = {}
 }

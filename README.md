@@ -1,65 +1,78 @@
-# EKS Infrastructure for Kafka/Streaming Workloads
+# LTIM EKS Infrastructure
 
-This repository contains generalized Terraform infrastructure code for deploying Amazon EKS clusters with supporting AWS resources. The infrastructure is designed to support Kafka and streaming workloads but can be adapted for any Kubernetes-based applications.
+This repository contains modularized Terraform infrastructure code for deploying Amazon EKS clusters with supporting AWS resources. The infrastructure follows best practices with reusable modules and environment-specific configurations.
 
 ## Repository Structure
 
 ```
 .
-├── iris-streaming-sandbox/        # Sandbox environment
-│   ├── environments/
-│   │   └── streaming.tfvars      # Environment-specific variables
-│   ├── vars/
-│   │   └── backend.hcl           # Backend configuration
-│   ├── eks.tf                    # EKS cluster configuration
-│   ├── iam.tf                    # IAM roles and policies
-│   ├── vpc.tf                    # VPC and networking
-│   ├── variables.tf              # Variable definitions
-│   ├── outputs.tf                # Output values
-│   ├── provider.tf               # Terraform providers
-│   └── README.md                 # Environment documentation
-├── .gitlab-ci.yml                # CI/CD pipeline
-├── .gitignore                    # Git ignore rules
-└── README.md                     # This file
+├── modules/                    # Shared Terraform modules
+│   ├── vpc/                   # VPC module (networking)
+│   ├── eks/                   # EKS cluster module
+│   └── iam/                   # IAM roles and policies module
+├── environments/              # Environment-specific configurations
+│   ├── sandbox/              # Sandbox environment
+│   ├── dev/                  # Development environment
+│   └── prod/                 # Production environment
+├── .gitlab-ci.yml            # CI/CD pipeline
+├── .gitignore                # Git ignore rules
+└── README.md                 # This file
 ```
 
-## Features
+## Architecture Overview
 
-### Networking
+### Modular Design
+
+This repository follows a modularized approach with:
+
+**Shared Modules** (`modules/`):
+- **VPC Module**: Creates multi-AZ VPC, subnets, NAT gateways, route tables
+- **EKS Module**: Creates EKS cluster, node groups, security groups, add-ons
+- **IAM Module**: Creates IAM roles for cluster, nodes, and add-ons (IRSA)
+
+**Root Modules** (`environments/`):
+- Each environment (sandbox, dev, prod) is a root module
+- Composes shared modules with environment-specific values
+- Maintains separate state files
+
+### Features
+
+#### Networking
 - Multi-AZ VPC with public and private subnets
 - Internet Gateway for public subnets
 - NAT Gateways for private subnet internet access
-- Configurable CIDR blocks
-- Automatic subnet tagging for EKS
+- Configurable CIDR blocks and availability zones
+- Automatic subnet tagging for EKS integration
 
-### EKS Cluster
+#### EKS Cluster
 - Configurable Kubernetes version
 - Public and/or private API endpoint access
 - Cluster logging to CloudWatch
-- OIDC provider for IAM roles for service accounts (IRSA)
+- OIDC provider for IAM Roles for Service Accounts (IRSA)
 - Security groups with proper ingress/egress rules
+- Multiple node groups with custom configurations
 
-### Node Groups
-- Multiple node group support with different configurations
-- Configurable instance types and capacity (ON_DEMAND/SPOT)
-- Auto-scaling groups
-- Custom labels and taints
+#### Node Groups
+- Flexible instance types and capacity (ON_DEMAND/SPOT)
+- Auto-scaling configuration
+- Custom labels and taints for workload segregation
 - Managed node group lifecycle
 
-### IAM & Security
+#### IAM & Security
 - EKS cluster IAM role with required policies
 - Node group IAM role with ECR, CNI, and worker node policies
 - EBS CSI driver IAM role with IRSA
 - AWS Load Balancer Controller IAM role with IRSA
+- EFS CSI driver IAM role with IRSA (optional)
 - Principle of least privilege
 
-### Add-ons
-- VPC CNI
+#### Add-ons
+- VPC CNI (Amazon VPC CNI plugin)
 - CoreDNS
 - kube-proxy
-- EBS CSI Driver (optional)
-- AWS Load Balancer Controller IAM setup (optional)
-- EFS CSI Driver (optional)
+- EBS CSI Driver (optional, for persistent volumes)
+- AWS Load Balancer Controller setup (optional)
+- EFS CSI Driver (optional, for shared file systems)
 
 ## Getting Started
 
@@ -73,64 +86,163 @@ This repository contains generalized Terraform infrastructure code for deploying
 
 ### Quick Start
 
-1. **Clone the repository**
+#### 1. Clone the Repository
 
 ```bash
 git clone <repository-url>
 cd eks-kafka
 ```
 
-2. **Configure backend storage**
+#### 2. Choose an Environment
 
-Edit `iris-streaming-sandbox/vars/backend.hcl`:
+Navigate to the environment you want to deploy:
+
+```bash
+cd environments/sandbox  # or dev, prod
+```
+
+#### 3. Configure Backend Storage
+
+Edit `vars/backend.hcl`:
 
 ```hcl
 bucket         = "your-terraform-state-bucket"
-key            = "iris-streaming/sandbox/terraform.tfstate"
+key            = "ltim/sandbox/terraform.tfstate"
 region         = "eu-west-1"
 encrypt        = true
 dynamodb_table = "terraform-state-lock"
 ```
 
-3. **Customize variables**
+#### 4. Customize Variables
 
-Edit `iris-streaming-sandbox/environments/streaming.tfvars` with your desired configuration.
+Edit `terraform.tfvars` with your desired configuration:
+- VPC CIDR blocks
+- EKS cluster version
+- Node group configurations
+- Add-on selections
+- Tags
 
-4. **Deploy using Terraform**
+#### 5. Deploy
 
 ```bash
-cd iris-streaming-sandbox
-terraform init -backend-config=vars/backend.hcl
-terraform plan -var-file=environments/streaming.tfvars
-terraform apply -var-file=environments/streaming.tfvars
+# Initialize Terraform
+terraform init -backend-config=vars/backend.hcl -upgrade
+
+# Validate configuration
+terraform validate
+
+# Plan deployment
+terraform plan
+
+# Apply configuration
+terraform apply
 ```
 
-5. **Configure kubectl**
+#### 6. Configure kubectl
 
 ```bash
-aws eks update-kubeconfig --name <cluster-name> --region <region>
+aws eks update-kubeconfig --name ltim-sandbox-eks --region eu-west-1
 kubectl get nodes
+```
+
+## Module Usage
+
+### VPC Module
+
+```hcl
+module "vpc" {
+  source = "../../modules/vpc"
+
+  project_name         = "ltim"
+  environment          = "sandbox"
+  vpc_cidr             = "10.0.0.0/16"
+  private_subnet_cidrs = ["10.0.1.0/24", "10.0.2.0/24", "10.0.3.0/24"]
+  public_subnet_cidrs  = ["10.0.101.0/24", "10.0.102.0/24", "10.0.103.0/24"]
+  enable_nat_gateway   = true
+  single_nat_gateway   = false
+  cluster_name         = "ltim-sandbox-eks"
+
+  tags = {
+    Environment = "sandbox"
+    ManagedBy   = "Terraform"
+  }
+}
+```
+
+### IAM Module
+
+```hcl
+module "iam" {
+  source = "../../modules/iam"
+
+  project_name                        = "ltim"
+  environment                         = "sandbox"
+  oidc_provider_arn                   = module.eks.oidc_provider_arn
+  oidc_provider_url                   = module.eks.oidc_provider_url
+  enable_ebs_csi_driver               = true
+  enable_aws_load_balancer_controller = true
+  enable_efs_csi_driver               = false
+
+  tags = {
+    Environment = "sandbox"
+    ManagedBy   = "Terraform"
+  }
+}
+```
+
+### EKS Module
+
+```hcl
+module "eks" {
+  source = "../../modules/eks"
+
+  project_name        = "ltim"
+  environment         = "sandbox"
+  cluster_name        = "ltim-sandbox-eks"
+  cluster_version     = "1.28"
+  cluster_role_arn    = module.iam.eks_cluster_role_arn
+  node_role_arn       = module.iam.eks_node_group_role_arn
+  vpc_id              = module.vpc.vpc_id
+  private_subnet_ids  = module.vpc.private_subnet_ids
+  public_subnet_ids   = module.vpc.public_subnet_ids
+
+  node_groups = {
+    general = {
+      desired_size   = 2
+      min_size       = 1
+      max_size       = 4
+      instance_types = ["t3.medium"]
+      capacity_type  = "ON_DEMAND"
+      disk_size      = 50
+      labels         = { role = "general" }
+      taints         = []
+    }
+  }
+
+  tags = {
+    Environment = "sandbox"
+    ManagedBy   = "Terraform"
+  }
+}
 ```
 
 ## Creating Additional Environments
 
-To create a new environment (e.g., dev, prod):
+To create a new environment:
 
-1. **Copy the environment directory**
-
+1. **Copy an existing environment**:
 ```bash
-cp -r iris-streaming-sandbox iris-streaming-dev
+cp -r environments/sandbox environments/staging
 ```
 
-2. **Update configuration files**
+2. **Update the configuration**:
+   - Edit `main.tf`: Update `locals` block with new environment name
+   - Edit `vars/backend.hcl`: Update state file path
+   - Edit `terraform.tfvars`: Customize environment-specific values
 
-- Edit `vars/backend.hcl` with new state file path
-- Edit `environments/streaming.tfvars` with dev-specific values
-- Update environment name and cluster name
-
-3. **Update GitLab CI/CD** (optional)
-
-Add new job definitions in `.gitlab-ci.yml` for the new environment.
+3. **Update GitLab CI/CD** (optional):
+   - Add new environment variables in `.gitlab-ci.yml`
+   - Create corresponding jobs for the new environment
 
 ## Configuration Variables
 
@@ -138,36 +250,12 @@ Add new job definitions in `.gitlab-ci.yml` for the new environment.
 
 | Variable | Description | Default |
 |----------|-------------|---------|
-| `environment` | Environment name | - |
-| `project_name` | Project name for resource naming | - |
 | `aws_region` | AWS region | `eu-west-1` |
-
-### VPC Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
 | `vpc_cidr` | VPC CIDR block | `10.0.0.0/16` |
-| `private_subnet_cidrs` | Private subnet CIDRs | `["10.0.1.0/24", ...]` |
-| `public_subnet_cidrs` | Public subnet CIDRs | `["10.0.101.0/24", ...]` |
-| `enable_nat_gateway` | Enable NAT Gateway | `true` |
-| `single_nat_gateway` | Use single NAT Gateway | `false` |
-
-### EKS Variables
-
-| Variable | Description | Default |
-|----------|-------------|---------|
-| `cluster_name` | EKS cluster name | - |
 | `cluster_version` | Kubernetes version | `1.28` |
-| `cluster_endpoint_public_access` | Enable public API access | `true` |
-| `enable_cluster_logging` | Enable CloudWatch logging | `true` |
 
-### Node Group Variables
+### Node Group Configuration
 
-| Variable | Description | Type |
-|----------|-------------|------|
-| `node_groups` | Map of node group configurations | `map(object)` |
-
-Example:
 ```hcl
 node_groups = {
   general = {
@@ -197,8 +285,15 @@ The repository includes a GitLab CI/CD pipeline with the following stages:
 Set these in GitLab CI/CD settings:
 
 - `AWS_ROLE_ARN_SANDBOX`: IAM role ARN for sandbox environment
-- `AWS_ROLE_ARN_DEVTEST`: IAM role ARN for dev/test environment
-- `AWS_ROLE_ARN_PRODUCTION`: IAM role ARN for production environment
+- `AWS_ROLE_ARN_DEV`: IAM role ARN for dev environment
+- `AWS_ROLE_ARN_PROD`: IAM role ARN for production environment
+
+### Running the Pipeline
+
+The pipeline runs automatically on push. To deploy:
+
+1. Review the plan stage output
+2. Manually trigger the apply stage for the desired environment
 
 ## Security Best Practices
 
@@ -210,7 +305,7 @@ Set these in GitLab CI/CD settings:
 2. **IAM**
    - Use IRSA for pod-level permissions
    - Follow least privilege principle
-   - Regularly rotate credentials
+   - Regularly review and rotate credentials
 
 3. **Encryption**
    - Enable encryption at rest for EBS volumes
@@ -227,59 +322,40 @@ Set these in GitLab CI/CD settings:
    - Enable AWS Config rules
    - Regular security audits
 
-## Outputs
-
-The Terraform configuration provides outputs for:
-
-- VPC ID and subnet IDs
-- EKS cluster endpoint and ARN
-- Node group information
-- IAM role ARNs
-- OIDC provider ARN
-- Kubeconfig for cluster access
-
 ## Troubleshooting
 
 ### Common Issues
 
-**Issue**: Terraform state lock error
+**Terraform state lock error**:
 ```bash
 terraform force-unlock <LOCK_ID>
 ```
 
-**Issue**: Node groups fail to create
+**Node groups fail to create**:
 - Check IAM permissions
-- Verify subnet tags
+- Verify subnet tags for EKS
 - Review security group rules
 
-**Issue**: Cannot access cluster API
+**Cannot access cluster API**:
 - Verify public access CIDR blocks
 - Check security group rules
 - Ensure AWS credentials are correct
 
-**Issue**: Pods can't pull images from ECR
-- Verify node IAM role has ECR permissions
-- Check VPC endpoints for private clusters
+**Circular dependency with IAM module**:
+- The IAM module handles this automatically
+- OIDC-dependent roles are created only when OIDC provider exists
+- Apply may take two passes for first deployment
 
-## Extending the Infrastructure
+## Cleanup
 
-### Adding Kafka (MSK)
+To destroy all resources in an environment:
 
-Uncomment and configure Kafka variables in `variables.tf` and add MSK resources.
+```bash
+cd environments/sandbox  # or dev, prod
+terraform destroy
+```
 
-### Adding Monitoring
-
-Consider adding:
-- Prometheus and Grafana using Helm
-- CloudWatch Container Insights
-- AWS X-Ray for distributed tracing
-
-### Adding Service Mesh
-
-Deploy Istio or AWS App Mesh for:
-- Traffic management
-- Security policies
-- Observability
+**Warning**: This will delete all resources including the EKS cluster and VPC.
 
 ## Contributing
 
@@ -289,6 +365,14 @@ Deploy Istio or AWS App Mesh for:
 4. Submit merge request
 5. Get approval and merge
 
+## Module Documentation
+
+Each module has its own README with detailed documentation:
+
+- [VPC Module](modules/vpc/README.md)
+- [EKS Module](modules/eks/README.md)
+- [IAM Module](modules/iam/README.md)
+
 ## Support
 
 For issues and questions:
@@ -296,13 +380,10 @@ For issues and questions:
 - Contact the platform team
 - Refer to AWS EKS documentation
 
-## License
-
-[Specify your license here]
-
 ## Additional Resources
 
 - [AWS EKS Best Practices](https://aws.github.io/aws-eks-best-practices/)
 - [Terraform AWS Provider](https://registry.terraform.io/providers/hashicorp/aws/latest/docs)
+- [Terraform Module Best Practices](https://www.terraform.io/docs/modules/index.html)
 - [Kubernetes Documentation](https://kubernetes.io/docs/)
-- [AWS MSK Documentation](https://docs.aws.amazon.com/msk/)
+- [AWS IAM Roles for Service Accounts](https://docs.aws.amazon.com/eks/latest/userguide/iam-roles-for-service-accounts.html)

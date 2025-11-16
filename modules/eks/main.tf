@@ -2,7 +2,7 @@
 resource "aws_security_group" "eks_cluster" {
   name        = "${var.project_name}-${var.environment}-eks-cluster-sg"
   description = "Security group for EKS cluster"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = var.vpc_id
 
   egress {
     from_port   = 0
@@ -12,7 +12,7 @@ resource "aws_security_group" "eks_cluster" {
   }
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.project_name}-${var.environment}-eks-cluster-sg"
     }
@@ -23,41 +23,49 @@ resource "aws_security_group" "eks_cluster" {
 resource "aws_eks_cluster" "main" {
   name     = var.cluster_name
   version  = var.cluster_version
-  role_arn = aws_iam_role.eks_cluster.arn
+  role_arn = var.cluster_role_arn
 
   vpc_config {
-    subnet_ids              = concat(aws_subnet.private[*].id, aws_subnet.public[*].id)
+    subnet_ids              = concat(var.private_subnet_ids, var.public_subnet_ids)
     endpoint_private_access = var.cluster_endpoint_private_access
     endpoint_public_access  = var.cluster_endpoint_public_access
     public_access_cidrs     = var.cluster_endpoint_public_access_cidrs
     security_group_ids      = [aws_security_group.eks_cluster.id]
   }
 
-  dynamic "enabled_cluster_log_types" {
-    for_each = var.enable_cluster_logging ? [1] : []
-    content {
-      enabled_cluster_log_types = var.cluster_log_types
-    }
-  }
+  enabled_cluster_log_types = var.enable_cluster_logging ? var.cluster_log_types : []
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = var.cluster_name
     }
   )
+}
 
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_cluster_policy,
-    aws_iam_role_policy_attachment.eks_vpc_resource_controller,
-  ]
+# OIDC Provider for EKS
+data "tls_certificate" "eks" {
+  url = aws_eks_cluster.main.identity[0].oidc[0].issuer
+}
+
+resource "aws_iam_openid_connect_provider" "eks" {
+  client_id_list  = ["sts.amazonaws.com"]
+  thumbprint_list = [data.tls_certificate.eks.certificates[0].sha1_fingerprint]
+  url             = aws_eks_cluster.main.identity[0].oidc[0].issuer
+
+  tags = merge(
+    var.tags,
+    {
+      Name = "${var.project_name}-${var.environment}-eks-oidc"
+    }
+  )
 }
 
 # EKS Node Group Security Group
 resource "aws_security_group" "eks_nodes" {
   name        = "${var.project_name}-${var.environment}-eks-nodes-sg"
   description = "Security group for EKS worker nodes"
-  vpc_id      = aws_vpc.main.id
+  vpc_id      = var.vpc_id
 
   egress {
     from_port   = 0
@@ -67,9 +75,9 @@ resource "aws_security_group" "eks_nodes" {
   }
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
-      Name                                        = "${var.project_name}-${var.environment}-eks-nodes-sg"
+      Name                                    = "${var.project_name}-${var.environment}-eks-nodes-sg"
       "kubernetes.io/cluster/${var.cluster_name}" = "owned"
     }
   )
@@ -114,8 +122,8 @@ resource "aws_eks_node_group" "main" {
 
   cluster_name    = aws_eks_cluster.main.name
   node_group_name = "${var.cluster_name}-${each.key}"
-  node_role_arn   = aws_iam_role.eks_node_group.arn
-  subnet_ids      = aws_subnet.private[*].id
+  node_role_arn   = var.node_role_arn
+  subnet_ids      = var.private_subnet_ids
 
   scaling_config {
     desired_size = each.value.desired_size
@@ -139,17 +147,16 @@ resource "aws_eks_node_group" "main" {
   }
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.cluster_name}-${each.key}"
     }
   )
 
-  depends_on = [
-    aws_iam_role_policy_attachment.eks_worker_node_policy,
-    aws_iam_role_policy_attachment.eks_cni_policy,
-    aws_iam_role_policy_attachment.eks_container_registry_policy,
-  ]
+  lifecycle {
+    create_before_destroy = true
+    ignore_changes        = [scaling_config[0].desired_size]
+  }
 }
 
 # EKS Add-ons
@@ -157,21 +164,21 @@ resource "aws_eks_addon" "vpc_cni" {
   cluster_name = aws_eks_cluster.main.name
   addon_name   = "vpc-cni"
 
-  tags = var.common_tags
+  tags = var.tags
 }
 
 resource "aws_eks_addon" "kube_proxy" {
   cluster_name = aws_eks_cluster.main.name
   addon_name   = "kube-proxy"
 
-  tags = var.common_tags
+  tags = var.tags
 }
 
 resource "aws_eks_addon" "coredns" {
   cluster_name = aws_eks_cluster.main.name
   addon_name   = "coredns"
 
-  tags = var.common_tags
+  tags = var.tags
 
   depends_on = [
     aws_eks_node_group.main
@@ -179,13 +186,13 @@ resource "aws_eks_addon" "coredns" {
 }
 
 resource "aws_eks_addon" "ebs_csi_driver" {
-  count = var.enable_ebs_csi_driver ? 1 : 0
+  count = var.enable_ebs_csi_driver && var.ebs_csi_driver_role_arn != "" ? 1 : 0
 
   cluster_name             = aws_eks_cluster.main.name
   addon_name               = "aws-ebs-csi-driver"
-  service_account_role_arn = aws_iam_role.ebs_csi_driver[0].arn
+  service_account_role_arn = var.ebs_csi_driver_role_arn
 
-  tags = var.common_tags
+  tags = var.tags
 
   depends_on = [
     aws_eks_node_group.main

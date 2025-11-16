@@ -5,7 +5,7 @@ resource "aws_vpc" "main" {
   enable_dns_support   = true
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.project_name}-${var.environment}-vpc"
     }
@@ -17,7 +17,7 @@ resource "aws_internet_gateway" "main" {
   vpc_id = aws_vpc.main.id
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.project_name}-${var.environment}-igw"
     }
@@ -42,11 +42,11 @@ resource "aws_subnet" "public" {
   map_public_ip_on_launch = true
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
-      Name                                            = "${var.project_name}-${var.environment}-public-subnet-${count.index + 1}"
-      "kubernetes.io/role/elb"                        = "1"
-      "kubernetes.io/cluster/${var.cluster_name}"     = "shared"
+      Name                                        = "${var.project_name}-${var.environment}-public-subnet-${count.index + 1}"
+      "kubernetes.io/role/elb"                    = "1"
+      "kubernetes.io/cluster/${var.cluster_name}" = "shared"
     }
   )
 }
@@ -59,11 +59,11 @@ resource "aws_subnet" "private" {
   availability_zone = local.azs[count.index]
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
-      Name                                            = "${var.project_name}-${var.environment}-private-subnet-${count.index + 1}"
-      "kubernetes.io/role/internal-elb"               = "1"
-      "kubernetes.io/cluster/${var.cluster_name}"     = "shared"
+      Name                                        = "${var.project_name}-${var.environment}-private-subnet-${count.index + 1}"
+      "kubernetes.io/role/internal-elb"           = "1"
+      "kubernetes.io/cluster/${var.cluster_name}" = "shared"
     }
   )
 }
@@ -74,7 +74,7 @@ resource "aws_eip" "nat" {
   domain = "vpc"
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.project_name}-${var.environment}-nat-eip-${count.index + 1}"
     }
@@ -90,7 +90,7 @@ resource "aws_nat_gateway" "main" {
   subnet_id     = aws_subnet.public[count.index].id
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.project_name}-${var.environment}-nat-${count.index + 1}"
     }
@@ -109,7 +109,7 @@ resource "aws_route_table" "public" {
   }
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.project_name}-${var.environment}-public-rt"
     }
@@ -137,7 +137,7 @@ resource "aws_route_table" "private" {
   }
 
   tags = merge(
-    var.common_tags,
+    var.tags,
     {
       Name = "${var.project_name}-${var.environment}-private-rt-${count.index + 1}"
     }
