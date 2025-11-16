@@ -49,22 +49,22 @@ output "eks_node_security_group_id" {
 # IAM Outputs
 output "eks_cluster_role_arn" {
   description = "ARN of the EKS cluster IAM role"
-  value       = module.iam.eks_cluster_role_arn
+  value       = module.iam_base.eks_cluster_role_arn
 }
 
 output "eks_node_group_role_arn" {
   description = "ARN of the EKS node group IAM role"
-  value       = module.iam.eks_node_group_role_arn
+  value       = module.iam_base.eks_node_group_role_arn
 }
 
 output "ebs_csi_driver_role_arn" {
   description = "ARN of the EBS CSI driver IAM role"
-  value       = module.iam.ebs_csi_driver_role_arn
+  value       = module.iam_irsa.ebs_csi_driver_role_arn
 }
 
 output "aws_load_balancer_controller_role_arn" {
   description = "ARN of the AWS Load Balancer Controller IAM role"
-  value       = module.iam.aws_load_balancer_controller_role_arn
+  value       = module.iam_irsa.aws_load_balancer_controller_role_arn
 }
 
 # kubectl config command
