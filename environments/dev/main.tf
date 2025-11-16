@@ -31,18 +31,19 @@ module "vpc" {
   tags = local.common_tags
 }
 
-# IAM Module - Base roles (cluster and node groups)
-# These don't require OIDC provider
-module "iam_base" {
+# IAM Module - Create base IAM roles first (before EKS cluster)
+# Note: This module creates cluster and node roles that don't need OIDC
+# OIDC-dependent roles are created after EKS cluster creation
+module "iam" {
   source = "../../modules/iam"
 
   project_name                        = local.project_name
   environment                         = local.environment
-  oidc_provider_arn                   = ""  # Empty initially, OIDC created by EKS
-  oidc_provider_url                   = ""  # Empty initially
-  enable_ebs_csi_driver               = false  # Will create after EKS
-  enable_aws_load_balancer_controller = false  # Will create after EKS
-  enable_efs_csi_driver               = false  # Will create after EKS
+  oidc_provider_arn                   = module.eks.oidc_provider_arn
+  oidc_provider_url                   = module.eks.oidc_provider_url
+  enable_ebs_csi_driver               = var.enable_ebs_csi_driver
+  enable_aws_load_balancer_controller = var.enable_aws_load_balancer_controller
+  enable_efs_csi_driver               = var.enable_efs_csi_driver
 
   tags = local.common_tags
 }
@@ -55,8 +56,8 @@ module "eks" {
   environment                          = local.environment
   cluster_name                         = local.cluster_name
   cluster_version                      = var.cluster_version
-  cluster_role_arn                     = module.iam_base.eks_cluster_role_arn
-  node_role_arn                        = module.iam_base.eks_node_group_role_arn
+  cluster_role_arn                     = module.iam.eks_cluster_role_arn
+  node_role_arn                        = module.iam.eks_node_group_role_arn
   vpc_id                               = module.vpc.vpc_id
   private_subnet_ids                   = module.vpc.private_subnet_ids
   public_subnet_ids                    = module.vpc.public_subnet_ids
@@ -66,27 +67,10 @@ module "eks" {
   enable_cluster_logging               = var.enable_cluster_logging
   cluster_log_types                    = var.cluster_log_types
   node_groups                          = var.node_groups
-  enable_ebs_csi_driver                = false  # Will enable after IRSA roles created
-  ebs_csi_driver_role_arn              = ""     # Not available yet
+  enable_ebs_csi_driver                = var.enable_ebs_csi_driver
+  ebs_csi_driver_role_arn              = module.iam.ebs_csi_driver_role_arn
 
   tags = local.common_tags
 
-  depends_on = [module.vpc, module.iam_base]
-}
-
-# IAM Module - IRSA roles (requires OIDC from EKS)
-module "iam_irsa" {
-  source = "../../modules/iam"
-
-  project_name                        = local.project_name
-  environment                         = local.environment
-  oidc_provider_arn                   = module.eks.oidc_provider_arn
-  oidc_provider_url                   = module.eks.oidc_provider_url
-  enable_ebs_csi_driver               = var.enable_ebs_csi_driver
-  enable_aws_load_balancer_controller = var.enable_aws_load_balancer_controller
-  enable_efs_csi_driver               = var.enable_efs_csi_driver
-
-  tags = local.common_tags
-
-  depends_on = [module.eks]
+  depends_on = [module.vpc, module.iam]
 }
