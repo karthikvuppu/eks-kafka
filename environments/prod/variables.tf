@@ -118,6 +118,12 @@ variable "enable_efs_csi_driver" {
   default     = false
 }
 
+variable "enable_cluster_autoscaler" {
+  description = "Enable Cluster Autoscaler"
+  type        = bool
+  default     = true
+}
+
 # Tags
 variable "common_tags" {
   description = "Common tags to apply to all resources"

@@ -12,3 +12,8 @@ output "efs_csi_driver_role_arn" {
   description = "ARN of the EFS CSI driver IAM role"
   value       = try(aws_iam_role.efs_csi_driver[0].arn, null)
 }
+
+output "cluster_autoscaler_role_arn" {
+  description = "ARN of the Cluster Autoscaler IAM role"
+  value       = try(aws_iam_role.cluster_autoscaler[0].arn, null)
+}

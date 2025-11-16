@@ -67,6 +67,11 @@ output "aws_load_balancer_controller_role_arn" {
   value       = module.iam_oidc.aws_load_balancer_controller_role_arn
 }
 
+output "cluster_autoscaler_role_arn" {
+  description = "ARN of the Cluster Autoscaler IAM role"
+  value       = module.iam_oidc.cluster_autoscaler_role_arn
+}
+
 # kubectl config command
 output "kubectl_config_command" {
   description = "Command to update kubeconfig for this cluster"

@@ -36,6 +36,12 @@ variable "enable_efs_csi_driver" {
   default     = false
 }
 
+variable "enable_cluster_autoscaler" {
+  description = "Enable Cluster Autoscaler IAM role"
+  type        = bool
+  default     = true
+}
+
 variable "tags" {
   description = "Common tags to apply to all resources"
   type        = map(string)

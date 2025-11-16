@@ -78,6 +78,7 @@ module "iam_oidc" {
   enable_ebs_csi_driver               = var.enable_ebs_csi_driver
   enable_aws_load_balancer_controller = var.enable_aws_load_balancer_controller
   enable_efs_csi_driver               = var.enable_efs_csi_driver
+  enable_cluster_autoscaler           = var.enable_cluster_autoscaler
 
   tags = local.common_tags
 
